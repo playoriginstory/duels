@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     }
 
     // Get the Generative Model instance using the globally initialized genAI client
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
     // Again, double-check the model name in Google's official documentation for flash models,
     // e.g., 'gemini-1.5-flash-latest' if that's what you intend to use.
     // For text-only analysis, 'gemini-pro' is a common and capable choice.

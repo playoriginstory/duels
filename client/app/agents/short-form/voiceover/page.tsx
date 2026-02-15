@@ -3,27 +3,35 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
-export default function VoiceoverProductionPage() {
+interface Voice {
+  id: string;
+  name: string;
+}
+
+interface RewriteOption {
+  label: string;
+  text: string;
+}
+
+export default function ShortFormVoiceoverPage() {
   const [script, setScript] = useState("");
   const [analysis, setAnalysis] = useState("");
+  const [rewrites, setRewrites] = useState<RewriteOption[]>([]);
+  const [selectedText, setSelectedText] = useState("");
+  const [voices, setVoices] = useState<Voice[]>([]);
   const [voiceId, setVoiceId] = useState("");
-  const [language, setLanguage] = useState("en");
   const [audio, setAudio] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [analyzed, setAnalyzed] = useState(false);
 
-  const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
-  const [translationVoiceId, setTranslationVoiceId] = useState("");
-  const [translationLanguage, setTranslationLanguage] = useState("en");
-  const [translatedAudio, setTranslatedAudio] = useState<string | null>(null);
-
-  // Fetch Eleven Labs voices on mount
+  /* =========================
+     FETCH VOICES
+  ========================== */
   useEffect(() => {
     const fetchVoices = async () => {
       try {
         const res = await fetch("/api/short-form/list-voices");
         const data = await res.json();
-        setVoices(data.voices);
+        setVoices(data.voices || []);
       } catch (err) {
         console.error("Failed to fetch voices:", err);
       }
@@ -31,21 +39,17 @@ export default function VoiceoverProductionPage() {
     fetchVoices();
   }, []);
 
-  // Upload script file
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    setScript(text);
-  };
-
-  // Analyze script
+  /* =========================
+     ANALYZE SCRIPT
+  ========================== */
   const handleAnalyze = async () => {
     if (!script) return alert("Please enter a script first.");
 
     setLoading(true);
+    setAnalysis("");
+    setRewrites([]);
+    setSelectedText("");
     setAudio(null);
-    setTranslatedAudio(null);
 
     try {
       const res = await fetch("/api/short-form/analyze-script", {
@@ -53,9 +57,9 @@ export default function VoiceoverProductionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ script }),
       });
+
       const data = await res.json();
-      setAnalysis(data.analysis);
-      setAnalyzed(true);
+      setAnalysis(data.analysis || "");
     } catch (err) {
       console.error(err);
       alert("Failed to analyze script");
@@ -64,9 +68,48 @@ export default function VoiceoverProductionPage() {
     }
   };
 
-  // Generate main voice
-  const handleGenerate = async () => {
+  /* =========================
+     GENERATE REWRITE (A/B/C)
+  ========================== */
+  const handleRewrite = async (option: string) => {
+    if (!script) return alert("Enter a script first.");
+
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/short-form/rewrite-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script, option }),
+      });
+
+      const data = await res.json();
+
+      if (!data.rewrite) {
+        alert("No rewrite returned");
+        return;
+      }
+
+      // Replace rewrite for this option if it exists
+      setRewrites((prev) => {
+        const filtered = prev.filter((r) => r.label !== option);
+        return [...filtered, { label: option, text: data.rewrite }];
+      });
+
+    } catch (err) {
+      console.error("Rewrite failed:", err);
+      alert("Rewrite failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =========================
+     GENERATE VOICE
+  ========================== */
+  const handleGenerateVoice = async () => {
     if (!voiceId) return alert("Select a voice first.");
+    if (!selectedText) return alert("Select original or a rewrite.");
 
     setLoading(true);
     setAudio(null);
@@ -75,14 +118,14 @@ export default function VoiceoverProductionPage() {
       const res = await fetch("/api/short-form/generate-voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          script,
-          voiceId,
-          language,
-        }),
+        body: JSON.stringify({ script: selectedText, voiceId }),
       });
+
       const data = await res.json();
-      setAudio(`data:audio/mp3;base64,${data.audio}`);
+
+      if (data.audio) {
+        setAudio(`data:audio/mp3;base64,${data.audio}`);
+      }
     } catch (err) {
       console.error(err);
       alert("Failed to generate voiceover");
@@ -91,104 +134,93 @@ export default function VoiceoverProductionPage() {
     }
   };
 
-  // Generate translated voice
-  const handleTranslate = async () => {
-    if (!translationVoiceId) return alert("Select a translation voice first.");
-
-    setLoading(true);
-    setTranslatedAudio(null);
-
-    try {
-      const res = await fetch("/api/short-form/translate-voice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          script,
-          voiceId: translationVoiceId,
-          language: translationLanguage,
-        }),
-      });
-      const data = await res.json();
-      setTranslatedAudio(`data:audio/mp3;base64,${data.audio}`);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to generate translated voiceover");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  /* =========================
+     UI
+  ========================== */
   return (
-    <div className="max-w-3xl mx-auto space-y-6 p-6">
-      <h1 className="text-2xl font-bold">Voiceover Production</h1>
+    <div className="max-w-3xl mx-auto p-6 space-y-6 bg-gray-50 text-gray-900">
+      <h1 className="text-2xl font-bold">Short-Form Voiceover</h1>
 
-      {/* Script Input */}
+      {/* SCRIPT INPUT */}
       <textarea
-        className="w-full border p-3 rounded"
+        className="w-full border p-3 rounded bg-white text-gray-900"
         rows={6}
         placeholder="Paste your script..."
         value={script}
         onChange={(e) => setScript(e.target.value)}
       />
 
-      {/* File Upload */}
-      <input type="file" accept=".txt" onChange={handleFileUpload} />
-
-      {/* Language Selector */}
-      <select
-        value={language}
-        onChange={(e) => setLanguage(e.target.value)}
-        className="border p-2 rounded"
-      >
-        <option value="en">English</option>
-        <option value="es">Spanish</option>
-        <option value="fr">French</option>
-        <option value="de">German</option>
-      </select>
-
-      {/* Analyze Button */}
       <Button onClick={handleAnalyze} disabled={loading}>
         {loading ? "Analyzing..." : "Analyze Script"}
       </Button>
 
-      {/* Analysis Output */}
+      {/* ANALYSIS */}
       {analysis && (
-        <div className="border p-4 rounded bg-gray-50">
+        <div className="border p-4 rounded bg-gray-100">
           <h2 className="font-semibold mb-2">Agent Feedback</h2>
-          <p className="text-sm whitespace-pre-wrap">{analysis}</p>
+          <p className="whitespace-pre-wrap text-sm">{analysis}</p>
         </div>
       )}
 
-      {/* Voice Select and Generate */}
-      {analyzed && (
-        <>
-          <label className="block mb-1 font-semibold">Select Voice</label>
-          <select
-            className="border p-2 rounded w-full mb-2"
-            value={voiceId}
-            onChange={(e) => setVoiceId(e.target.value)}
-          >
-            <option value="">-- Choose Voice --</option>
-            {voices.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
+      {/* REWRITE GENERATORS */}
+      {analysis && (
+        <div className="border p-4 rounded bg-white space-y-4">
+          <h3 className="font-semibold">Generate Rewrite</h3>
 
-          <Button onClick={handleGenerate} disabled={loading}>
-            {loading ? "Generating..." : "Generate Voice"}
+          <div className="flex flex-col space-y-2">
+            <Button onClick={() => handleRewrite("A")} disabled={loading}>
+              Generate Option A (Viral Hook)
+            </Button>
+
+            <Button onClick={() => handleRewrite("B")} disabled={loading}>
+              Generate Option B (Comedic)
+            </Button>
+
+            <Button onClick={() => handleRewrite("C")} disabled={loading}>
+              Generate Option C (Emotional)
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* SELECT ORIGINAL OR REWRITE */}
+      {analysis && (
+        <div className="border p-4 rounded bg-gray-100 space-y-4">
+          <h3 className="font-semibold">Choose Version</h3>
+
+          <Button
+            variant={selectedText === script ? "default" : "outline"}
+            onClick={() => setSelectedText(script)}
+          >
+            Use Original
           </Button>
 
-          {/* Translation Section */}
-          <div className="mt-6 border-t pt-4">
-            <h3 className="font-semibold mb-2">Optional Translation Voice</h3>
+          {rewrites.map((r) => (
+            <div key={r.label} className="space-y-2">
+              <p className="text-sm whitespace-pre-wrap border p-2 rounded bg-white">
+                {r.text}
+              </p>
 
-            <label className="block mb-1">Select Voice</label>
+              <Button
+                variant={selectedText === r.text ? "default" : "outline"}
+                onClick={() => setSelectedText(r.text)}
+              >
+                Use Rewrite {r.label}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* VOICE SELECTION */}
+      {analysis && (
+        <div className="border p-4 rounded bg-white space-y-4">
+          <div>
+            <label className="block mb-1 font-semibold">Select Voice</label>
             <select
-              className="border p-2 rounded w-full mb-2"
-              value={translationVoiceId}
-              onChange={(e) => setTranslationVoiceId(e.target.value)}
+              className="border p-2 rounded w-full"
+              value={voiceId}
+              onChange={(e) => setVoiceId(e.target.value)}
             >
               <option value="">-- Choose Voice --</option>
               {voices.map((v) => (
@@ -197,41 +229,23 @@ export default function VoiceoverProductionPage() {
                 </option>
               ))}
             </select>
-
-            <label className="block mb-1">Target Language</label>
-            <select
-              className="border p-2 rounded w-full mb-2"
-              value={translationLanguage}
-              onChange={(e) => setTranslationLanguage(e.target.value)}
-            >
-              <option value="en">English</option>
-              <option value="es">Spanish</option>
-              <option value="fr">French</option>
-              <option value="de">German</option>
-            </select>
-
-            <Button onClick={handleTranslate} disabled={loading}>
-              {loading ? "Generating..." : "Generate Translation"}
-            </Button>
           </div>
-        </>
-      )}
 
-      {/* Audio Players */}
-      {audio && (
-        <div className="mt-4">
-          <h4 className="font-semibold">Original Voiceover</h4>
-          <audio controls className="w-full">
-            <source src={audio} type="audio/mp3" />
-          </audio>
+          <Button
+            onClick={handleGenerateVoice}
+            disabled={loading || !voiceId || !selectedText}
+          >
+            {loading ? "Generating..." : "Generate Voice"}
+          </Button>
         </div>
       )}
 
-      {translatedAudio && (
+      {/* AUDIO PLAYER */}
+      {audio && (
         <div className="mt-4">
-          <h4 className="font-semibold">Translated Voiceover</h4>
-          <audio controls className="w-full">
-            <source src={translatedAudio} type="audio/mp3" />
+          <h4 className="font-semibold">Generated Voiceover</h4>
+          <audio controls className="w-full mt-1">
+            <source src={audio} type="audio/mp3" />
           </audio>
         </div>
       )}
