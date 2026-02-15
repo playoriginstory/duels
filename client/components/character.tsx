@@ -117,6 +117,11 @@ export default function ServiceAgentPage() {
     }
   };
 
+  // Navigate directly to voiceover production page
+  const goToVoiceoverPage = () => {
+    router.push("/agents/short-form/voiceover");
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -154,6 +159,18 @@ export default function ServiceAgentPage() {
               >
                 {isGenerating ? "Generating..." : "Generate New"}
               </Button>
+
+              {/* Voiceover Production button only for short-form */}
+              {agent.vertical === "short-form" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={goToVoiceoverPage}
+                  className="mt-1"
+                >
+                  Voiceover Production
+                </Button>
+              )}
             </div>
           ))}
         </div>
