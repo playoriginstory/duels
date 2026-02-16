@@ -13,6 +13,16 @@ interface RewriteOption {
   text: string;
 }
 
+const languages = [
+  "Spanish",
+  "French",
+  "German",
+  "Japanese",
+  "Korean",
+  "Chinese (Simplified)",
+  "Italian",
+];
+
 export default function ShortFormVoiceoverPage() {
   const [script, setScript] = useState("");
   const [analysis, setAnalysis] = useState("");
@@ -22,6 +32,12 @@ export default function ShortFormVoiceoverPage() {
   const [voiceId, setVoiceId] = useState("");
   const [audio, setAudio] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Translation state
+  const [targetLanguage, setTargetLanguage] = useState("");
+  const [translatedText, setTranslatedText] = useState("");
+  const [translatedAudio, setTranslatedAudio] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
 
   /* =========================
      FETCH VOICES
@@ -50,6 +66,8 @@ export default function ShortFormVoiceoverPage() {
     setRewrites([]);
     setSelectedText("");
     setAudio(null);
+    setTranslatedText("");
+    setTranslatedAudio(null);
 
     try {
       const res = await fetch("/api/short-form/analyze-script", {
@@ -60,6 +78,19 @@ export default function ShortFormVoiceoverPage() {
 
       const data = await res.json();
       setAnalysis(data.analysis || "");
+
+      // Keep original + dummy rewrites if none returned
+      const apiRewrites: RewriteOption[] =
+        data.rewrites && data.rewrites.length
+          ? data.rewrites
+          : [
+              { label: "A", text: script },
+              { label: "B", text: script },
+              { label: "C", text: script },
+            ];
+      setRewrites(apiRewrites);
+
+      setSelectedText(script); // default selection
     } catch (err) {
       console.error(err);
       alert("Failed to analyze script");
@@ -73,7 +104,6 @@ export default function ShortFormVoiceoverPage() {
   ========================== */
   const handleRewrite = async (option: string) => {
     if (!script) return alert("Enter a script first.");
-
     setLoading(true);
 
     try {
@@ -84,18 +114,12 @@ export default function ShortFormVoiceoverPage() {
       });
 
       const data = await res.json();
+      if (!data.rewrite) return alert("No rewrite returned");
 
-      if (!data.rewrite) {
-        alert("No rewrite returned");
-        return;
-      }
-
-      // Replace rewrite for this option if it exists
       setRewrites((prev) => {
         const filtered = prev.filter((r) => r.label !== option);
         return [...filtered, { label: option, text: data.rewrite }];
       });
-
     } catch (err) {
       console.error("Rewrite failed:", err);
       alert("Rewrite failed");
@@ -122,15 +146,51 @@ export default function ShortFormVoiceoverPage() {
       });
 
       const data = await res.json();
-
-      if (data.audio) {
-        setAudio(`data:audio/mp3;base64,${data.audio}`);
-      }
+      if (data.audio) setAudio(`data:audio/mp3;base64,${data.audio}`);
     } catch (err) {
       console.error(err);
       alert("Failed to generate voiceover");
     } finally {
       setLoading(false);
+    }
+  };
+
+  /* =========================
+     TRANSLATE + GENERATE VOICE
+  ========================== */
+  const handleTranslateAndGenerate = async () => {
+    if (!selectedText) return alert("Select a script first");
+    if (!targetLanguage) return alert("Select a language");
+    if (!voiceId) return alert("Select a voice");
+
+    setTranslating(true);
+    setTranslatedText("");
+    setTranslatedAudio(null);
+
+    try {
+      // Translate
+      const resTranslate = await fetch("/api/short-form/translate-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: selectedText, targetLanguage }),
+      });
+      const dataTranslate = await resTranslate.json();
+      if (!dataTranslate.translated) throw new Error("Translation failed");
+      setTranslatedText(dataTranslate.translated);
+
+      // Generate voice
+      const resVoice = await fetch("/api/short-form/generate-voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script: dataTranslate.translated, voiceId }),
+      });
+      const dataVoice = await resVoice.json();
+      if (dataVoice.audio) setTranslatedAudio(`data:audio/mp3;base64,${dataVoice.audio}`);
+    } catch (err) {
+      console.error(err);
+      alert("Translation or voice generation failed");
+    } finally {
+      setTranslating(false);
     }
   };
 
@@ -166,18 +226,15 @@ export default function ShortFormVoiceoverPage() {
       {analysis && (
         <div className="border p-4 rounded bg-white space-y-4">
           <h3 className="font-semibold">Generate Rewrite</h3>
-
           <div className="flex flex-col space-y-2">
             <Button onClick={() => handleRewrite("A")} disabled={loading}>
-              Generate Option A (Viral Hook)
+              Option A (Viral Hook)
             </Button>
-
             <Button onClick={() => handleRewrite("B")} disabled={loading}>
-              Generate Option B (Comedic)
+              Option B (Comedic)
             </Button>
-
             <Button onClick={() => handleRewrite("C")} disabled={loading}>
-              Generate Option C (Emotional)
+              Option C (Emotional)
             </Button>
           </div>
         </div>
@@ -187,7 +244,6 @@ export default function ShortFormVoiceoverPage() {
       {analysis && (
         <div className="border p-4 rounded bg-gray-100 space-y-4">
           <h3 className="font-semibold">Choose Version</h3>
-
           <Button
             variant={selectedText === script ? "default" : "outline"}
             onClick={() => setSelectedText(script)}
@@ -200,7 +256,6 @@ export default function ShortFormVoiceoverPage() {
               <p className="text-sm whitespace-pre-wrap border p-2 rounded bg-white">
                 {r.text}
               </p>
-
               <Button
                 variant={selectedText === r.text ? "default" : "outline"}
                 onClick={() => setSelectedText(r.text)}
@@ -224,9 +279,7 @@ export default function ShortFormVoiceoverPage() {
             >
               <option value="">-- Choose Voice --</option>
               {voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
+                <option key={v.id} value={v.id}>{v.name}</option>
               ))}
             </select>
           </div>
@@ -240,13 +293,68 @@ export default function ShortFormVoiceoverPage() {
         </div>
       )}
 
-      {/* AUDIO PLAYER */}
+      {/* ORIGINAL VOICE AUDIO */}
       {audio && (
         <div className="mt-4">
           <h4 className="font-semibold">Generated Voiceover</h4>
           <audio controls className="w-full mt-1">
             <source src={audio} type="audio/mp3" />
           </audio>
+        </div>
+      )}
+
+      {/* TRANSLATE + VOICE */}
+      {selectedText && (
+        <div className="border p-4 rounded bg-gray-50 space-y-4 mt-4">
+          <h3 className="font-semibold">Translate & Generate Voice</h3>
+
+          <div>
+            <label className="block mb-1 font-semibold">Select Language</label>
+            <select
+              className="border p-2 rounded w-full"
+              value={targetLanguage}
+              onChange={(e) => setTargetLanguage(e.target.value)}
+            >
+              <option value="">-- Choose Language --</option>
+              {languages.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block mb-1 font-semibold">Select Voice</label>
+            <select
+              className="border p-2 rounded w-full"
+              value={voiceId}
+              onChange={(e) => setVoiceId(e.target.value)}
+            >
+              <option value="">-- Choose Voice --</option>
+              {voices.map((v) => (
+                <option key={v.id} value={v.id}>{v.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <Button
+            onClick={handleTranslateAndGenerate}
+            disabled={translating || !targetLanguage || !voiceId}
+          >
+            {translating ? "Translating & Generating..." : "Translate & Generate Voice"}
+          </Button>
+
+          {translatedText && (
+            <div className="mt-2 p-2 border rounded bg-white space-y-2">
+              <h4 className="font-semibold">Translated Script</h4>
+              <p className="whitespace-pre-wrap text-sm">{translatedText}</p>
+            </div>
+          )}
+
+          {translatedAudio && (
+            <audio controls className="w-full mt-1">
+              <source src={translatedAudio} type="audio/mp3" />
+            </audio>
+          )}
         </div>
       )}
     </div>
