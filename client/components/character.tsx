@@ -27,7 +27,7 @@ const AGENT_LIBRARY: Agent[] = [
   },
   {
     value: 2,
-    vertical: "marketing",
+    vertical: "transcription",
     description: "Real-Time Translation Coach",
     preview: "/assets/images/marketingcoach.png",
     prompt:
@@ -72,7 +72,6 @@ const AGENT_PROMPT_LIBRARY: Record<string, string[]> = {
     "Creative writing coach in minimalist library guiding storytelling techniques."
   ],
 };
-
 export default function ServiceAgentPage() {
   const router = useRouter();
   const [agents, setAgents] = useState<Agent[]>(AGENT_LIBRARY);
@@ -94,7 +93,8 @@ export default function ServiceAgentPage() {
       const prompts = AGENT_PROMPT_LIBRARY[agent.vertical] || [];
       if (!prompts.length) throw new Error("No prompts available for this style");
 
-      const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+      const randomPrompt =
+        prompts[Math.floor(Math.random() * prompts.length)];
 
       const res = await fetch("/api/nano-banana", {
         method: "POST",
@@ -103,9 +103,9 @@ export default function ServiceAgentPage() {
       });
 
       const data = await res.json();
-      if (!res.ok || !data.url) throw new Error(data?.error || "Failed to generate agent");
+      if (!res.ok || !data.url)
+        throw new Error(data?.error || "Failed to generate agent");
 
-      // Update only this agent's preview
       const newAgents = [...agents];
       newAgents[index] = { ...agent, preview: data.url };
       setAgents(newAgents);
@@ -117,9 +117,12 @@ export default function ServiceAgentPage() {
     }
   };
 
-  // Navigate directly to voiceover production page
   const goToVoiceoverPage = () => {
     router.push("/agents/short-form/voiceover");
+  };
+
+  const goToTranscriptionPage = () => {
+    router.push("/agents/transcription");
   };
 
   return (
@@ -127,11 +130,15 @@ export default function ServiceAgentPage() {
       <CardHeader>
         <CardTitle>Service Agents</CardTitle>
       </CardHeader>
+
       <CardContent>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
           {agents.map((agent, index) => (
-            <div key={agent.value} className="flex flex-col items-center gap-2">
-              {/* Clickable card */}
+            <div
+              key={agent.value}
+              className="flex flex-col items-center gap-2"
+            >
+              {/* Clickable Card */}
               <div
                 className={cn(
                   "cursor-pointer rounded-lg overflow-hidden border hover:ring-2 hover:ring-primary transition-all",
@@ -142,15 +149,19 @@ export default function ServiceAgentPage() {
                 <p className="text-center text-sm text-gray-500 py-1 bg-gray-100">
                   Service: {agent.description}
                 </p>
+
                 <img
                   src={agent.preview}
                   alt={agent.description}
                   className="h-48 w-48 object-cover"
                 />
-                <p className="p-2 text-xs text-gray-600">{agent.prompt}</p>
+
+                <p className="p-2 text-xs text-gray-600">
+                  {agent.prompt}
+                </p>
               </div>
 
-              {/* Generate new button */}
+              {/* Generate New */}
               <Button
                 size="sm"
                 variant="outline"
@@ -160,7 +171,7 @@ export default function ServiceAgentPage() {
                 {isGenerating ? "Generating..." : "Generate New"}
               </Button>
 
-              {/* Voiceover Production button only for short-form */}
+              {/* Short Form Special Button */}
               {agent.vertical === "short-form" && (
                 <Button
                   size="sm"
@@ -169,6 +180,18 @@ export default function ServiceAgentPage() {
                   className="mt-1"
                 >
                   Voiceover Production
+                </Button>
+              )}
+
+              {/* Transcription Special Button */}
+              {agent.vertical === "transcription" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={goToTranscriptionPage}
+                  className="mt-1"
+                >
+                  Enter Transcription
                 </Button>
               )}
             </div>

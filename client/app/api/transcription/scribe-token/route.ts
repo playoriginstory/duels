@@ -1,19 +1,31 @@
 import { NextResponse } from "next/server";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 
-export const runtime = "nodejs";
-
-const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_API_KEY,
-});
-
 export async function GET() {
   try {
-    const token = await elevenlabs.tokens.singleUse.create("realtime_scribe");
+    const apiKey = process.env.ELEVENLABS_API_KEY;
 
-    return NextResponse.json({ token: token.token });
-  } catch (err: any) {
-    console.error("Token error:", err);
-    return NextResponse.json({ error: "Failed to create token" }, { status: 500 });
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Missing ELEVENLABS_API_KEY" },
+        { status: 500 }
+      );
+    }
+
+    const elevenlabs = new ElevenLabsClient({ apiKey });
+
+    // SDK returns { token: "sutkn_..." } — pass it through directly
+    // The client destructures: const { token } = await res.json()
+    const tokenData = await elevenlabs.tokens.singleUse.create("realtime_scribe");
+
+    console.log("SDK tokenData:", tokenData); // verify shape in server logs
+
+    return NextResponse.json(tokenData);
+  } catch (error) {
+    console.error("Token creation error:", error);
+    return NextResponse.json(
+      { error: "Failed to create token" },
+      { status: 500 }
+    );
   }
 }

@@ -176,7 +176,9 @@ export default function Home() {
       <Card className="w-full max-w-lg">
         <CardHeader className="text-center">
           <CardTitle>Welcome to Duels</CardTitle>
-          <CardDescription>Connect your wallet to begin</CardDescription>
+          <CardDescription>
+            {isConnecting ? "Connecting wallet..." : "Connect your wallet to begin"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
           <ConnectKitButton />
@@ -184,6 +186,7 @@ export default function Home() {
       </Card>
     );
   }
+    
   
   if (!connected && selectedChain === "solana") {
     return (
