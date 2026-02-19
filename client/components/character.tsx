@@ -43,11 +43,11 @@ const AGENT_LIBRARY: Agent[] = [
   },
   {
     value: 5,
-    vertical: "writing",
-    description: "Writing Coach",
+    vertical: "dubbing",
+    description: "Dubbing Coach",
     preview: "/assets/images/writingagent.png",
     prompt:
-      "A modern writing coach in a stylish digital library. Dressed in smart casual techwear with augmented reality glasses, floating virtual notes and storyboards surround them. Soft ambient lighting and a minimalist workspace enhance focus. They radiate wisdom, creativity, and clarity for storytelling mastery.",
+      "A modern dubbing coach in a stylish digital library. Dressed in smart casual techwear with augmented reality glasses, floating virtual notes and storyboards surround them. Soft ambient lighting and a minimalist workspace enhance focus. They radiate wisdom, creativity, and clarity for storytelling mastery.",
   },
 ];
 
@@ -194,6 +194,19 @@ export default function ServiceAgentPage() {
                   Enter Transcription
                 </Button>
               )}
+
+              {/* Dubbing Special Button */}
+              {agent.vertical === "dubbing" && (
+              <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => goToAgentPage(agent.vertical)}
+              className="mt-1"
+  >
+    Enter Dubbing
+  </Button>
+)}
+
             </div>
           ))}
         </div>

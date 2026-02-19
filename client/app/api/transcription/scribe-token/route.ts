@@ -1,31 +1,30 @@
 import { NextResponse } from "next/server";
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) return NextResponse.json({ error: "Missing ELEVENLABS_API_KEY" }, { status: 500 });
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "Missing ELEVENLABS_API_KEY" },
-        { status: 500 }
-      );
+    const res = await fetch("https://api.elevenlabs.io/v1/single-use-token/realtime_scribe", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("ElevenLabs API error:", res.status, text);
+      return NextResponse.json({ error: "ElevenLabs API error", detail: text }, { status: res.status });
     }
 
-    const elevenlabs = new ElevenLabsClient({ apiKey });
+    const data = await res.json();
+    console.log("Fresh token data:", data);
 
-    // SDK returns { token: "sutkn_..." } — pass it through directly
-    // The client destructures: const { token } = await res.json()
-    const tokenData = await elevenlabs.tokens.singleUse.create("realtime_scribe");
-
-    console.log("SDK tokenData:", tokenData); // verify shape in server logs
-
-    return NextResponse.json(tokenData);
+    return NextResponse.json({ token: data.token }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Token creation error:", error);
-    return NextResponse.json(
-      { error: "Failed to create token" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create token" }, { status: 500 });
   }
 }
