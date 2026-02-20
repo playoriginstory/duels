@@ -167,6 +167,10 @@ export default function DubbingAgent() {
         Dubbing Agent
       </h1>
 
+      <p className="text-sm text-gray-500">
+    Please submit a video or audio file no larger than 100MB. Delivery times may vary, please do not close this window.
+      </p>
+
       <input
         type="file"
         accept="audio/*,video/*"

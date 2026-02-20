@@ -1,184 +1,60 @@
 "use client";
 
 import CharacterPage from "@/components/character";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import WalletConnection from "@/components/WalletConnection";
-import { getUserAvatar } from "@/lib/dynamodb";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectKitButton } from "connectkit";
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Address, isAddress, parseEther } from "viem";
-import { useAccount, useBalance, useSendTransaction } from "wagmi";
-import { checkEligibility } from "@/lib/tokengate";
-
-import {
-  PublicKey,
-  SystemProgram,
-  LAMPORTS_PER_SOL,
-  Transaction,
-} from "@solana/web3.js";
+import { useAccount } from "wagmi";
 
 export default function Home() {
-  const [selectedChain, setSelectedChain] = useState<"lens" | "solana">(
-    "lens"
-  );
-  const [isTxSuccess, setIsTxSuccess] = useState(false);
-  const [eligible, setEligible] = useState<boolean>(true);
-
-
-  // Lens-specific states
   const { address, isConnecting, isConnected } = useAccount();
-  const { data: balance } = useBalance({ address });
-  const { sendTransaction } = useSendTransaction();
+  const [eligible, setEligible] = useState<boolean | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
-  // Solana-specific states
-  const wallet = useWallet();
-  const { publicKey, connected } = wallet;
-  const { connection } = useConnection();
-
-// Comment out or remove the eligibility check effect
-// useEffect(() => {
-//   const verify = async () => {
-//     if (!address || selectedChain !== "lens") return;
-//     try {
-//       const result = await checkEligibility(address as `0x${string}`);
-//       setEligible(result);
-//     } catch (err) {
-//       console.error("Eligibility check failed:", err);
-//       setEligible(false);
-//     }
-//   };
-
-//   if (isConnected && selectedChain === "lens") {
-//     verify();
-//   }
-// }, [address, isConnected, selectedChain]);
-
-// Instead, just hardcode eligible
-
-
+  // Check eligibility on wallet connect
   useEffect(() => {
-    if (selectedChain === "lens" && isConnected) {
-      const getAvatar = async () => {
-        const address = "0x1"; // Replace with actual logic if needed
-        const res = await getUserAvatar(address as string);
-        console.log("Avatar fetched:", res?.avatarUrl);
-      };
-      getAvatar();
-    }
-  }, [isConnected, address, selectedChain]);
+    const verify = async () => {
+      if (!address || !isConnected) return;
+      try {
+        const res = await fetch("/api/verify-holder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet: address }),
+        });
+        const data = await res.json();
 
-  const handleLensInsert = () => {
-    interface TransactionConfig {
-      to: Address;
-      value: ReturnType<typeof parseEther>;
-    }
-
-    interface TransactionCallbacks {
-      onSuccess: (hash: string) => Promise<void>;
-      onError: (error: Error) => void;
-    }
-
-    const recipientAddress =
-      process.env.NEXT_PUBLIC_LENS_RECEIVER_ADDRESS || "";
-
-    if (!isAddress(recipientAddress)) {
-      throw new Error("Invalid Ethereum address");
-    }
-
-    const transactionConfig: TransactionConfig = {
-      to: recipientAddress as Address,
-      value: parseEther("0.01"),
-    };
-
-    const transactionCallbacks: TransactionCallbacks = {
-      onSuccess: async (hash: string) => {
-        setIsTxSuccess(true);
-      },
-      onError: (error: Error) => {
-        console.error("Lens TX ERROR", error);
-      },
-    };
-
-    sendTransaction(transactionConfig, transactionCallbacks);
-  };
-
-  const handleSolanaInsert = async () => {
-    try {
-      if (!connection || !publicKey || !connected) {
-        setIsTxSuccess(false);
-        return;
-      }
-
-      const senderBalance = await connection.getBalance(publicKey);
-      if (senderBalance < LAMPORTS_PER_SOL) {
-        console.log("Insufficient balance. You need at least 1 SOL.");
-        return;
-      }
-
-      const lamportsToSend = 1 * LAMPORTS_PER_SOL;
-      const recipientPubKey = new PublicKey(
-        process.env.NEXT_PUBLIC_SOLANA_RECEIVER_ADDRESS as string
-      );
-
-      const transferTransaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: publicKey,
-          toPubkey: recipientPubKey,
-          lamports: lamportsToSend,
-        })
-      );
-
-      const transactionSignature = await wallet.sendTransaction(
-        transferTransaction,
-        connection,
-        {
-          preflightCommitment: "processed",
+        if (!res.ok) {
+          setEligible(false);
+        } else {
+          setEligible(true);
+          setToken(data.token || null);
+          localStorage.setItem("duelsSession", data.token);
         }
-      );
-
-      const confirmation = await connection.confirmTransaction(
-        transactionSignature,
-        "processed"
-      );
-      if (confirmation?.value?.err) {
-        console.error("Transaction failed", confirmation.value.err);
-        return;
+      } catch (err) {
+        console.error("Eligibility check failed:", err);
+        setEligible(false);
       }
+    };
 
-      setIsTxSuccess(true);
-    } catch (error) {
-      console.error("Error during transaction:", error);
-      setIsTxSuccess(false);
-    }
-  };
+    verify();
+  }, [address, isConnected]);
 
-  if (isConnecting && selectedChain === "lens") {
+  // Connecting state
+  if (isConnecting) {
     return (
       <Card className="w-full max-w-lg">
-        <CardContent className="!pt-6 text-center">
-          Connecting wallet...
-        </CardContent>
+        <CardContent className="!pt-6 text-center">Connecting wallet...</CardContent>
       </Card>
     );
   }
-  
-  if (!isConnected && selectedChain === "lens") {
+
+  // Wallet not connected
+  if (!isConnected) {
     return (
       <Card className="w-full max-w-lg">
         <CardHeader className="text-center">
           <CardTitle>Welcome to Duels</CardTitle>
-          <CardDescription>
-            {isConnecting ? "Connecting wallet..." : "Connect your wallet to begin"}
-          </CardDescription>
+          <p>Connect your wallet to begin</p>
         </CardHeader>
         <CardContent className="flex justify-center">
           <ConnectKitButton />
@@ -186,71 +62,33 @@ export default function Home() {
       </Card>
     );
   }
-    
-  
-  if (!connected && selectedChain === "solana") {
+
+  // Wallet connected but not eligible
+  if (eligible === false) {
     return (
-      <Card className="w-full max-w-lg">
-        <CardHeader className="text-center">
-          <CardTitle>Welcome to Duels</CardTitle>
-          <CardDescription>Connect your Solana wallet to begin</CardDescription>
-        </CardHeader>
-        <CardContent className="flex justify-center">
-          <WalletConnection />
-        </CardContent>
-      </Card>
-    );
-  }
-  
-  if (isConnected || connected) {
-    return !isTxSuccess ? (
       <Card className="w-full max-w-lg text-center">
         <CardContent className="!pt-6">
-          <p>Time to Level Up</p>
-          <select
-            value={selectedChain}
-            onChange={(e) =>
-              setSelectedChain(e.target.value as "lens" | "solana")
-            }
-            className="mt-4 w-full border p-2 rounded"
-          >
-            <option value="lens">Base (OriginStory & Duels) - Login Coming Soon</option>
-            <option value="solana">Solana</option>
-          </select>
-
-          {selectedChain === "lens" ? (
-  <>
-    {/* Skip eligibility check or assume true */}
-    <p className="mt-4">Click Continue to enter</p>
-    <Button
-      onClick={() => setIsTxSuccess(true)} // bypass insert/transaction
-      variant="default"
-      size="lg"
-      className="mt-4 w-full"
-    >
-      Continue
-    </Button>
-  </>
-) : (
-  <>
-              <p className="mt-4">Insert Solana to play</p>
-              <Button
-                onClick={handleSolanaInsert}
-                variant="default"
-                size="lg"
-                className="mt-4 w-full"
-              >
-                Insert 1 SOL
-              </Button>
-              <WalletConnection />
-            </>
-          )}
+          <p>
+            Hold ≥ 100 ORIGIN or DUELS to access Duels dubbing.
+          </p>
+          <p className="mt-2">
+            <a
+              href="https://app.virtuals.io/prototypes/0xDFAC0671843E7294330C6859701729Cad3AdBdC7"
+              target="_blank"
+              className="text-blue-500 underline"
+            >
+              Purchase DUELS here
+            </a>
+          </p>
         </CardContent>
       </Card>
-    ) : (
-      <CharacterPage />
     );
   }
-  
+
+  // Wallet connected and eligible → show agent page
+  if (eligible) {
+    return <CharacterPage />;
+  }
+
   return null;
 }
