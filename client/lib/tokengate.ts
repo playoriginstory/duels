@@ -1,5 +1,4 @@
-import { readContract } from "@wagmi/core";
-import { base } from "wagmi/chains";
+import { base } from "viem/chains";
 import { createPublicClient, http } from "viem";
 
 const client = createPublicClient({
@@ -22,26 +21,24 @@ const ERC20_ABI = [
     inputs: [{ name: "owner", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
   },
-];
+] as const;
 
 // 100 tokens (18 decimals)
 const MIN_REQUIRED = BigInt("100000000000000000000");
 
 export async function checkEligibility(address: `0x${string}`) {
   const [originBalance, dualBalance] = await Promise.all([
-    readContract({
+    client.readContract({
       address: ORIGIN,
       abi: ERC20_ABI,
       functionName: "balanceOf",
-      parameters: [address],
-      client,
+      args: [address],
     }),
-    readContract({
+    client.readContract({
       address: DUELS,
       abi: ERC20_ABI,
       functionName: "balanceOf",
-      parameters: [address],
-      client,
+      args: [address],
     }),
   ]);
 
