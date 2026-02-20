@@ -22,6 +22,7 @@ const jersey15 = Jersey_15({
   subsets: ["latin"],
   variable: "--font-jersey-15",
   weight: "400",
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
