@@ -12,9 +12,8 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // Increase request body size for images
-export const api = {
-  bodyParser: { sizeLimit: "50mb" },
-};
+export const maxDuration = 60; // optional, for timeout
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
