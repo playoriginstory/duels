@@ -12,12 +12,9 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // Increase request body size for images
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "50mb", // allows larger images
-    },
-  },
+export const runtime = "edge"; // if you want edge runtime
+export const api = {
+  bodyParser: { sizeLimit: "50mb" },
 };
 
 export async function POST(req: NextRequest) {
