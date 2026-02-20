@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { ElevenLabsClient, RealtimeEvents } from "@elevenlabs/elevenlabs-js";
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { Scribe, RealtimeEvents, AudioFormat, CommitStrategy } from "@elevenlabs/client";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
@@ -20,16 +22,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No URL provided" }, { status: 400 });
     }
 
-    // Instantiate inside the handler - avoids stale client at module load time
-    // when env vars may not yet be available
+    // Generate a single-use token server-side
     const elevenlabs = new ElevenLabsClient({ apiKey });
+    const { token } = await elevenlabs.tokens.singleUse.create("realtime_scribe");
 
-    const connection = await elevenlabs.speechToText.realtime.connect({
+    // Connect using the client SDK with the token
+    const connection = Scribe.connect({
+      token,
       modelId: "scribe_v2_realtime",
       includeTimestamps: true,
+      audioFormat: AudioFormat.PCM_16000,
+      sampleRate: 16000,
+      commitStrategy: CommitStrategy.MANUAL,
     });
 
     let finalTranscript = "";
+
+    // Wait for session to start before sending audio
+    await new Promise<void>((resolve) => {
+      connection.on(RealtimeEvents.SESSION_STARTED, () => resolve());
+    });
 
     connection.on(RealtimeEvents.COMMITTED_TRANSCRIPT, (data) => {
       finalTranscript += data.text + " ";
@@ -39,7 +51,7 @@ export async function POST(req: Request) {
       console.error("Realtime error:", err);
     });
 
-    // Fetch the audio from the URL and pipe it to the connection
+    // Fetch audio from URL and stream chunks into connection
     const audioRes = await fetch(url);
 
     if (!audioRes.ok || !audioRes.body) {
@@ -51,22 +63,27 @@ export async function POST(req: Request) {
 
     const reader = audioRes.body.getReader();
 
-    // Stream audio chunks into the realtime connection
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       const base64 = Buffer.from(value).toString("base64");
       connection.send({ audioBase64: base64 });
+
+      // Small delay to avoid overwhelming the websocket
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
     // Signal end of audio and wait for final transcript
     connection.commit();
 
-    // Wait for committed transcript(s) to come back - adjust timeout as needed
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await new Promise<void>((resolve) => {
+      connection.on(RealtimeEvents.COMMITTED_TRANSCRIPT, () => resolve());
+      // Fallback timeout in case no more transcripts come
+      setTimeout(resolve, 8000);
+    });
 
-    await connection.close();
+    connection.close();
 
     return NextResponse.json({
       transcript: finalTranscript.trim(),
