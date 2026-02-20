@@ -10,11 +10,18 @@ export default function Home() {
   const { address, isConnecting, isConnected } = useAccount();
   const [eligible, setEligible] = useState<boolean | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true); // added to handle initial render
 
   // Check eligibility on wallet connect
   useEffect(() => {
     const verify = async () => {
-      if (!address || !isConnected) return;
+      if (!address || !isConnected) {
+        setEligible(null);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       try {
         const res = await fetch("/api/verify-holder", {
           method: "POST",
@@ -33,17 +40,21 @@ export default function Home() {
       } catch (err) {
         console.error("Eligibility check failed:", err);
         setEligible(false);
+      } finally {
+        setLoading(false);
       }
     };
 
     verify();
   }, [address, isConnected]);
 
-  // Connecting state
-  if (isConnecting) {
+  // Initial load / connecting wallet
+  if (loading || isConnecting) {
     return (
-      <Card className="w-full max-w-lg">
-        <CardContent className="!pt-6 text-center">Connecting wallet...</CardContent>
+      <Card className="w-full max-w-lg text-center">
+        <CardContent className="!pt-6">
+          <p>{isConnecting ? "Connecting wallet..." : "Checking eligibility..."}</p>
+        </CardContent>
       </Card>
     );
   }
@@ -68,9 +79,7 @@ export default function Home() {
     return (
       <Card className="w-full max-w-lg text-center">
         <CardContent className="!pt-6">
-          <p>
-            Hold ≥ 100 ORIGIN or DUELS to access Duels dubbing.
-          </p>
+          <p>Hold ≥ 100 ORIGIN or DUELS to access Duels dubbing.</p>
           <p className="mt-2">
             <a
               href="https://app.virtuals.io/prototypes/0xDFAC0671843E7294330C6859701729Cad3AdBdC7"
@@ -90,5 +99,12 @@ export default function Home() {
     return <CharacterPage />;
   }
 
-  return null;
+  // Fallback if something unexpected happens
+  return (
+    <Card className="w-full max-w-lg text-center">
+      <CardContent className="!pt-6">
+        <p>Loading your wallet status...</p>
+      </CardContent>
+    </Card>
+  );
 }
